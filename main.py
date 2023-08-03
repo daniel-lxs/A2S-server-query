@@ -109,8 +109,7 @@ class Bot(commands.InteractionBot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.warning = ' ' + emojize(':warning:')
-        self.servers_sent_message = None  # Store the sent message in memory
-        self.servers2_sent_message = None
+        self.last_sent_messages = {}  # Dictionary to store the last sent message for each channel
 
         # Start the servers_task_loop
         self.servers_task_loop.start()
@@ -150,10 +149,11 @@ class Bot(commands.InteractionBot):
     # Define the function to update the message content
     async def update_message_content(self):
         try:
-            if self.servers_sent_message is not None:
-                print('/servers updating message')
-                updated_msg = await generate_message(config.servers["L4D2"])
-                await self.servers_sent_message.edit(embed=Embed.from_dict(updated_msg))
+            for channel_id, sent_message in self.last_sent_messages.items():
+                if sent_message is not None:
+                    print(f'{channel_id}: updating message')
+                    updated_msg = await generate_message(config.servers["L4D2"])
+                    await sent_message.edit(embed=Embed.from_dict(updated_msg))
         except Exception as ex:
             print(f"update_message_content: ex: {ex}")
 
@@ -169,18 +169,18 @@ async def servers(context):
     msg = await generate_message(config.servers["L4D2"])
     await context.send(embed=Embed.from_dict(msg))  # Send the initial message
 
-    bot.servers_sent_message = await context.original_response()
+    bot.last_sent_messages[context.channel.id] = await context.original_response()
 
 
 @bot.slash_command(description="Query the WhoCares L4D2 servers")
 async def servers2(context):
     print(f"==================================================")
-    print(f"/servers: begin: user:{context.author.name}")
+    print(f"/servers2: begin: user:{context.author.name}")
     await context.response.defer(with_message=False, ephemeral=False)
     msg = await generate_message(config.servers["Other"])
     await context.send(embed=Embed.from_dict(msg))  # Send the initial message
 
-    bot.servers2_sent_message = await context.original_response()
+    bot.last_sent_messages[context.channel.id] = await context.original_response()
 
 
 @bot.event
