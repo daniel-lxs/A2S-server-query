@@ -146,13 +146,13 @@ class Bot(commands.InteractionBot):
         except Exception as ex:
             print(f"update_player_count_task: ex: {ex}")
 
-    # Define the function to update the message content
     async def update_message_content(self):
         try:
+            updated_msg = await generate_message(config.servers["L4D2"])
+
             for channel_id, sent_message in self.last_sent_messages.items():
                 if sent_message is not None:
                     print(f'{channel_id}: updating message')
-                    updated_msg = await generate_message(config.servers["L4D2"])
                     await sent_message.edit(embed=Embed.from_dict(updated_msg))
         except Exception as ex:
             print(f"update_message_content: ex: {ex}")
