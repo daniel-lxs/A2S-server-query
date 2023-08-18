@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import re
+import paramiko
 import sys
 import datetime
 from disnake.ext import tasks, commands
@@ -9,6 +11,7 @@ from query import query
 from config import Config
 
 config = Config("./config.yml")
+
 
 async def generate_message(servers):
     try:
@@ -29,11 +32,12 @@ async def generate_message(servers):
                 content += f"Players: {player_count}/{max_players}, Map: {campaign}"
 
                 if len(result['players']):
-                    players = "\n".join(f"  {p}" for p in result['players'] if p)
+                    players = "\n".join(
+                        f"  {p}" for p in result['players'] if p)
                     content += f"\n{players}"
 
                 content += f"\n[🔗Connect](https://connectsteam.me/?{endpoint})"
-                
+
                 online_servers.append(
                     {
                         "name": f"{emoji} {server_name}  ```{endpoint}```",
@@ -86,6 +90,7 @@ async def generate_message(servers):
     print("/servers: end")
     return embed_dict
 
+
 async def get_total_player_count(servers, errors=False):
     total_player_count = 0
     try:
@@ -95,13 +100,12 @@ async def get_total_player_count(servers, errors=False):
                 total_player_count += result['player_count']
     except Exception:
         pass
-      
-    if errors: 
-      errors = [result.get('ex', None) for result in results]
-      return total_player_count, errors
-    else:
-      return total_player_count
 
+    if errors:
+        errors = [result.get('ex', None) for result in results]
+        return total_player_count, errors
+    else:
+        return total_player_count
 
 
 class Bot(commands.InteractionBot):
@@ -109,7 +113,8 @@ class Bot(commands.InteractionBot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.warning = ' ' + emojize(':warning:')
-        self.last_sent_messages = {}  # Dictionary to store the last sent message for each channel
+        # Dictionary to store the last sent message for each channel
+        self.last_sent_messages = {}
 
         # Start the servers_task_loop
         self.servers_task_loop.start()
@@ -181,6 +186,74 @@ async def servers2(context):
     await context.send(embed=Embed.from_dict(msg))  # Send the initial message
 
     bot.last_sent_messages[context.channel.id] = await context.original_response()
+
+
+@bot.slash_command(description="Ban an IP address")
+async def banip(ctx, ip: str, bantime: str):
+    await ctx.response.defer()
+    # Check if the user has the Moderator role
+    moderator_role = ctx.guild.get_role(config.moderator_role_id)
+    if moderator_role is None or moderator_role not in ctx.author.roles:
+        await ctx.send("You don't have permission to use this command.")
+        return
+
+    ctx.response.defer()
+
+    # Convert bantime to seconds
+    if not re.match(r'^\d+[smh]*$', bantime):
+        await ctx.send("Invalid bantime format. Use something like '10s', '12m', '2h', '2h12m10s'.")
+        return
+
+    time_units = {"s": 1, "m": 60, "h": 3600}
+    seconds = int(bantime[:-1]) * time_units.get(bantime[-1], 1)
+
+    # SSH connection and command execution
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    try:
+        ssh.connect(config.server, username=config.username,
+                    password=config.password)
+        cmd_to_execute = f"nft add element ip filter blacklist {{ {ip} timeout {seconds}s }}"
+        ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(cmd_to_execute)
+
+        ssh_stdout.read().decode('utf-8').strip()
+
+        await ctx.send(content=f"IP address banned: {ip}")
+    except Exception as ex:
+        await ctx.send(content=f"An error occurred: {ex}")
+    finally:
+        ssh.close()
+
+
+@bot.slash_command(description="Unban an IP address")
+async def unbanip(ctx, ip: str):
+    await ctx.response.defer()
+    # Check if the user has the Moderator role
+    moderator_role = ctx.guild.get_role(config.moderator_role_id)
+    if moderator_role is None or moderator_role not in ctx.author.roles:
+        await ctx.send("You don't have permission to use this command.")
+        return
+
+    # SSH connection and command execution
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    try:
+        ssh.connect(config.server, username=config.username,
+                    password=config.password)
+        cmd_to_execute = f"nft delete element ip filter blacklist {{ {ip} }}"
+        ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(cmd_to_execute)
+
+        ssh_stdout.read().decode('utf-8').strip()
+
+        # Edit the original response
+        await ctx.send(content=f"IP address unbanned: {ip}")
+    except Exception as ex:
+        # Edit the original response in case of an error
+        await ctx.send(content=f"An error occurred: {ex}")
+    finally:
+        ssh.close()
 
 
 @bot.event
