@@ -275,31 +275,6 @@ async def reload_config(ctx):
         await ctx.send(f"An error occurred while reloading the configuration: {ex}")
 
 
-@bot.slash_command(description="View or update the server list")
-async def servers_list(ctx, *, new_server_list: str = None):
-    await ctx.response.defer()
-
-    # Check if the user has the Moderator role
-    moderator_role = ctx.guild.get_role(config.moderator_role_id)
-    if moderator_role is None or moderator_role not in ctx.author.roles:
-        await ctx.send("You don't have permission to use this command.")
-        return
-
-    if new_server_list is None:
-        # Display the current server list
-        current_server_list = yaml.dump(
-            config.servers, default_flow_style=False)
-        await ctx.send(f"Current server list:\n```yaml\n{current_server_list}```")
-    else:
-        # Update the server list with the new input
-        try:
-            new_servers = yaml.safe_load(new_server_list)
-            config.servers = new_servers
-            await ctx.send("Server list updated successfully.")
-        except Exception as ex:
-            await ctx.send(f"An error occurred while updating the server list: {ex}")
-
-
 @bot.event
 async def on_ready():
     print("on_ready: begin")
