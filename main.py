@@ -256,6 +256,24 @@ async def unbanip(ctx, ip: str):
         ssh.close()
 
 
+@bot.slash_command(description="Reload the configuration file")
+async def reload_config(ctx):
+    await ctx.response.defer()
+
+    # Check if the user has the Moderator role
+    moderator_role = ctx.guild.get_role(config.moderator_role_id)
+    if moderator_role is None or moderator_role not in ctx.author.roles:
+        await ctx.send("You don't have permission to use this command.")
+        return
+
+    # Attempt to reload the configuration
+    try:
+        config.reload()  # Implement the reload method in your Config class
+        await ctx.send("Configuration reloaded successfully.")
+    except Exception as ex:
+        await ctx.send(f"An error occurred while reloading the configuration: {ex}")
+
+
 @bot.event
 async def on_ready():
     print("on_ready: begin")
