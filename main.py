@@ -202,25 +202,25 @@ async def servers2(context):
 
 
 @bot.slash_command(description="Ban an IP address")
-async def banip(ctx, ip: str, bantime: str):
+async def banip(ctx, ip: str, bantime: str, reason: str):
     await ctx.response.defer()
+
     # Check if the user has the Moderator role
     moderator_role = ctx.guild.get_role(config.moderator_role_id)
     if moderator_role is None or moderator_role not in ctx.author.roles:
         await ctx.send("You don't have permission to use this command.")
         return
 
-    ctx.response.defer()
-
     # Convert bantime to seconds
-    if not re.match(r"^\d+[smh]*$", bantime):
+    match = re.match(r"^(\d+)([smhd]*)$", bantime)
+    if not match:
         await ctx.send(
-            "Invalid bantime format. Use something like '10s', '12m', '2h', '2h12m10s'."
+            "Invalid bantime format. Use something like '10s', '12m', '2h', '2d', or a combination like '2h12m10s'."
         )
         return
 
-    time_units = {"s": 1, "m": 60, "h": 3600}
-    seconds = int(bantime[:-1]) * time_units.get(bantime[-1], 1)
+    time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    seconds = int(match.group(1)) * time_units.get(match.group(2), 1)
 
     # SSH connection and command execution
     ssh = paramiko.SSHClient()
@@ -236,7 +236,7 @@ async def banip(ctx, ip: str, bantime: str):
 
         ssh_stdout.read().decode("utf-8").strip()
 
-        await ctx.send(content=f"IP address banned: {ip}")
+        await ctx.send(content=f"IP address banned: {ip}\nReason: {reason}")
     except Exception as ex:
         await ctx.send(content=f"An error occurred: {ex}")
     finally:
