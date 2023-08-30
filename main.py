@@ -6,6 +6,7 @@ import sys
 import datetime
 import yaml
 from disnake.ext import tasks, commands
+import disnake
 from disnake import Embed
 from emoji import emojize
 from query import query
@@ -200,9 +201,11 @@ async def servers2(context):
 
     bot.last_sent_messages_other[context.channel.id] = await context.original_response()
 
+user_sessions = {}
+
 
 @bot.slash_command(description="Ban an IP address")
-async def banip(ctx, ip: str, bantime: str, reason: str):
+async def banip(ctx, ip: str, bantime: str = None, reason: str = 'No reason'):
     await ctx.response.defer()
 
     # Check if the user has the Moderator role
@@ -211,14 +214,72 @@ async def banip(ctx, ip: str, bantime: str, reason: str):
         await ctx.send("You don't have permission to use this command.")
         return
 
+    if (bantime != None):
+        await perform_ban_logic(ctx, ip, bantime, reason)
+        return
+
+    # Create components for ban options
+    troll_button = disnake.ui.Button(
+        style=disnake.ButtonStyle.primary, label="Troll (30d)", custom_id="ban_troll")
+    cheater_button = disnake.ui.Button(
+        style=disnake.ButtonStyle.primary, label="Cheater (Perma)", custom_id="ban_cheater")
+
+    view = disnake.ui.View()
+    view.add_item(troll_button)
+    view.add_item(cheater_button)
+
+    # Store IP address in user's session context
+    user_sessions[ctx.author.id] = {"ip": ip}
+
+    await ctx.send("Choose a ban option:", view=view)
+
+
+@bot.listen("on_button_click")
+async def button_listener(inter: disnake.MessageInteraction):
+    if inter.component.custom_id == "ban_troll":
+        await ban_troll(inter)
+    elif inter.component.custom_id == "ban_cheater":
+        await ban_cheater(inter)
+
+
+async def ban_troll(interaction: disnake.MessageInteraction):
+    await interaction.response.defer()
+    
+    # Delete the buttons
+    await interaction.message.edit(content="Processing...", components=[])
+
+    # Retrieve IP address from user's session context
+    ip = user_sessions.get(interaction.author.id, {}).get("ip")
+    if ip is None:
+        return  # IP address not found in session, handle error
+
+    # Execute troll ban logic
+    await perform_ban_logic(interaction, ip, "30d", "Trolling")
+
+
+async def ban_cheater(interaction: disnake.MessageInteraction):
+    await interaction.response.defer()
+    
+    # Delete the buttons
+    await interaction.message.edit(content="Processing...", components=[])
+
+    # Retrieve IP address from user's session context
+    ip = user_sessions.get(interaction.author.id, {}).get("ip")
+    if ip is None:
+        return  # IP address not found in session, handle error
+
+    # Execute cheater ban logic
+    await perform_cheater_ban_logic(interaction, ip, "Cheater")
+
+
+async def perform_ban_logic(interaction, ip, bantime, reason):
     # Convert bantime to seconds
     match = re.match(r"^(\d+)([smhd]*)$", bantime)
     if not match:
-        await ctx.send(
+        await interaction.send(
             "Invalid bantime format. Use something like '10s', '12m', '2h', '2d', or a combination like '2h12m10s'."
         )
         return
-
     time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
     seconds = int(match.group(1)) * time_units.get(match.group(2), 1)
 
@@ -236,9 +297,33 @@ async def banip(ctx, ip: str, bantime: str, reason: str):
 
         ssh_stdout.read().decode("utf-8").strip()
 
-        await ctx.send(content=f"IP address banned: {ip}\nReason: {reason}")
+        # Notify user about the ban
+        await interaction.edit_original_message(content=f"IP address banned: {ip}\nReason: {reason}\nBan duration: {bantime}")
     except Exception as ex:
-        await ctx.send(content=f"An error occurred: {ex}")
+        await interaction.edit_original_message(content=f"An error occurred: {ex}")
+    finally:
+        ssh.close()
+
+
+async def perform_cheater_ban_logic(interaction, ip, reason):
+    # SSH connection and command execution
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    try:
+        ssh.connect(config.server, username=config.username,
+                    password=config.password)
+        cmd_to_execute = (
+            f"nft add element ip filter blackhole {{ {ip} }}"
+        )
+        ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(cmd_to_execute)
+
+        ssh_stdout.read().decode("utf-8").strip()
+
+        # Notify user about the ban
+        await interaction.edit_original_message(content=f"IP address banned: {ip}\nReason: {reason}\nBan action: Perma ban")
+    except Exception as ex:
+        await interaction.edit_original_message(content=f"An error occurred: {ex}")
     finally:
         ssh.close()
 
