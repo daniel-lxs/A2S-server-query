@@ -61,7 +61,8 @@ def get_campaign(info):
         "c13m2_southpinestream": "Cold Stream 2/4",
         "c13m3_memorialbridge": "Cold Stream 3/4",
         "c13m4_cutthroatcreek": "Cold Stream 4/4",
-        "c14m": "The Last Stand"
+        "c14m1_junkyard": "The Last Stand 1/2",
+        "c14m2_lighthouse": "The Last Stand 2/2"
     }
 
     if info.game == "Left 4 Dead 2":
